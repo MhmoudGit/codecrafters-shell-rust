@@ -2,6 +2,7 @@
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
+use std::process::Command as og_cmd;
 
 fn main() {
     repl();
@@ -95,6 +96,16 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
+fn run_command(name: &str, args: Vec<&str>) {
+    match find_in_path(name) {
+        Some(_path) => match og_cmd::new(name).args(args).status() {
+            Ok(_) => {}
+            Err(e) => println!("{e}"),
+        },
+        None => println!("{}: command not found", name),
+    }
+}
+
 fn repl() {
     loop {
         print!("$ ");
@@ -114,7 +125,7 @@ fn repl() {
                 Command::Exit => break,
                 Command::Echo => echo_command(command_args),
                 Command::Type => type_command(command_args),
-                Command::Unknown => println!("{}: command not found", command),
+                Command::Unknown => run_command(command_name, command_args),
             }
         }
     }
