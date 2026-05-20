@@ -31,7 +31,7 @@ fn type_command(command: Vec<&str>) {
     if let Command::Unknown = cmd {
         println!("{}: command not found", cmd_name)
     } else {
-        println!("{}: is a shell builtin", cmd_name)
+        println!("{} is a shell builtin", cmd_name)
     }
 }
 
