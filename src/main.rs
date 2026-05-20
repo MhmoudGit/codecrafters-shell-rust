@@ -1,5 +1,7 @@
 #[allow(unused_imports)]
+use std::env;
 use std::io::{self, Write};
+use std::path::Path;
 
 fn main() {
     repl();
@@ -26,12 +28,70 @@ fn echo_command(text: Vec<&str>) {
 }
 
 fn type_command(command: Vec<&str>) {
-    let cmd_name = command[0];
-    let cmd = commands_from_string(&cmd_name);
-    if let Command::Unknown = cmd {
-        println!("{}: not found", cmd_name)
+    for cmd_name in command {
+        let cmd = commands_from_string(cmd_name);
+
+        if !matches!(cmd, Command::Unknown) {
+            println!("{} is a shell builtin", cmd_name);
+            continue;
+        }
+
+        match find_in_path(cmd_name) {
+            Some(path) => println!("{} is {}", cmd_name, path.display()),
+            None => println!("{}: not found", cmd_name),
+        }
+    }
+}
+
+fn find_in_path(cmd_name: &str) -> Option<std::path::PathBuf> {
+    let path_var = env::var_os("PATH")?;
+
+    for dir in env::split_paths(&path_var) {
+        let candidate = dir.join(cmd_name);
+
+        if is_executable(&candidate) {
+            return Some(candidate);
+        }
+
+        #[cfg(windows)]
+        {
+            for ext in ["exe", "cmd", "bat", "com"] {
+                let candidate = dir.join(format!("{cmd_name}.{ext}"));
+
+                if is_executable(&candidate) {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    if let Ok(meta) = fs::metadata(path) {
+        meta.is_file() && (meta.permissions().mode() & 0o111 != 0)
     } else {
-        println!("{} is a shell builtin", cmd_name)
+        false
+    }
+}
+
+#[cfg(windows)]
+fn is_executable(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) => matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "exe" | "cmd" | "bat" | "com"
+        ),
+        None => false,
     }
 }
 
