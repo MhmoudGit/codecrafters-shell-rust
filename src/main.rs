@@ -94,7 +94,8 @@ impl Command {
             return;
         }
 
-        let target_dir = path[0];
+        let home = env::var("HOME").unwrap();
+        let target_dir = if path[0] == "~" { &home } else { path[0] };
 
         match env::set_current_dir(target_dir) {
             Ok(_) => {}
