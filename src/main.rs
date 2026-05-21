@@ -176,6 +176,7 @@ enum ParseState {
     Normal,
     SingleQuote,
     DoubleQuote,
+    Escape,
 }
 
 fn parse_args(command: &str) -> Vec<String> {
@@ -188,6 +189,7 @@ fn parse_args(command: &str) -> Vec<String> {
             ParseState::Normal => match c {
                 '\'' => state = ParseState::SingleQuote,
                 '"' => state = ParseState::DoubleQuote,
+                '\\' => state = ParseState::Escape,
 
                 ' ' => {
                     if !current.is_empty() {
@@ -208,6 +210,11 @@ fn parse_args(command: &str) -> Vec<String> {
                 '"' => state = ParseState::Normal,
                 _ => current.push(c),
             },
+
+            ParseState::Escape => {
+                current.push(c);
+                state = ParseState::Normal;
+            }
         }
     }
 
