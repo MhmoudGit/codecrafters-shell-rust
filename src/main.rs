@@ -47,7 +47,7 @@ impl Command {
     }
 
     fn execute(command: &str) -> bool {
-        let args = Command::parse_args(command);
+        let args = parse_args(command);
 
         if args.is_empty() {
             return true;
@@ -67,37 +67,6 @@ impl Command {
         }
 
         true
-    }
-
-    fn parse_args(command: &str) -> Vec<String> {
-        let mut args = Vec::new();
-        let mut current = String::new();
-        let mut in_single_quote = false;
-
-        for c in command.chars() {
-            match c {
-                '\'' => {
-                    in_single_quote = !in_single_quote;
-                }
-
-                ' ' if !in_single_quote => {
-                    if !current.is_empty() {
-                        args.push(current);
-                        current = String::new();
-                    }
-                }
-
-                _ => {
-                    current.push(c);
-                }
-            }
-        }
-
-        if !current.is_empty() {
-            args.push(current);
-        }
-
-        args
     }
 
     fn echo_cmd(text: Vec<String>) {
@@ -200,4 +169,51 @@ fn is_executable(path: &Path) -> bool {
         ),
         None => false,
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ParseState {
+    Normal,
+    SingleQuote,
+    DoubleQuote,
+}
+
+fn parse_args(command: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut state = ParseState::Normal;
+
+    for c in command.chars() {
+        match state {
+            ParseState::Normal => match c {
+                '\'' => state = ParseState::SingleQuote,
+                '"' => state = ParseState::DoubleQuote,
+
+                ' ' => {
+                    if !current.is_empty() {
+                        args.push(current);
+                        current = String::new();
+                    }
+                }
+
+                _ => current.push(c),
+            },
+
+            ParseState::SingleQuote => match c {
+                '\'' => state = ParseState::Normal,
+                _ => current.push(c),
+            },
+
+            ParseState::DoubleQuote => match c {
+                '"' => state = ParseState::Normal,
+                _ => current.push(c),
+            },
+        }
+    }
+
+    if !current.is_empty() {
+        args.push(current);
+    }
+
+    args
 }
