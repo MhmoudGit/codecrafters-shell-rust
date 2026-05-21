@@ -80,10 +80,12 @@ impl Command {
     ) {
         let output = format!("{}\n", text.join(" "));
 
+        if let Some((file, append)) = err_redirect {
+            touch_redirect(&file, append);
+        }
+
         if let Some((file, append)) = redirect {
             write_to_file(&file, &output, append);
-        } else if let Some((file, append)) = err_redirect {
-            write_to_file(&file, "", append);
         } else {
             print!("{output}");
         }
@@ -108,10 +110,12 @@ impl Command {
     fn pwd_cmd(redirect: Option<(String, bool)>, err_redirect: Option<(String, bool)>) {
         let output = format!("{}\n", env::current_dir().unwrap().display());
 
+        if let Some((file, append)) = err_redirect {
+            touch_redirect(&file, append);
+        }
+
         if let Some((file, append)) = redirect {
             write_to_file(&file, &output, append);
-        } else if let Some((file, append)) = err_redirect {
-            write_to_file(&file, "", append);
         } else {
             print!("{output}");
         }
@@ -375,5 +379,18 @@ fn write_to_file(path: &str, content: &str, append: bool) {
             }
         }
         Err(e) => println!("redirection error: {e}"),
+    }
+}
+
+fn touch_redirect(path: &str, append: bool) {
+    let result = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(append)
+        .truncate(!append)
+        .open(path);
+
+    if let Err(e) = result {
+        println!("redirection error: {e}");
     }
 }
