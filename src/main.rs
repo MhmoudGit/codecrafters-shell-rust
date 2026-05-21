@@ -8,38 +8,90 @@ fn main() {
     repl();
 }
 
+fn repl() {
+    loop {
+        print!("$ ");
+        io::stdout().flush().unwrap();
+
+        let mut command = String::new();
+        io::stdin().read_line(&mut command).unwrap();
+        let command = command.trim();
+
+        if command != "" {
+            if !Command::execute(command) {
+                break;
+            }
+        }
+    }
+}
+
 enum Command {
     Exit,
     Echo,
     Type,
+    PWD,
     Unknown,
 }
 
-fn commands_from_string(command: &str) -> Command {
-    match command {
-        "exit" => Command::Exit,
-        "echo" => Command::Echo,
-        "type" => Command::Type,
-        _ => Command::Unknown,
+impl Command {
+    fn from_string(command: &str) -> Command {
+        match command {
+            "exit" => Command::Exit,
+            "echo" => Command::Echo,
+            "type" => Command::Type,
+            "pwd" => Command::PWD,
+            _ => Command::Unknown,
+        }
     }
-}
 
-fn echo_command(text: Vec<&str>) {
-    println!("{}", text.join(" "));
-}
+    fn execute(command: &str) -> bool {
+        let args = command.split(" ").collect::<Vec<&str>>();
+        let command_name = args[0];
+        let command_args = args[1..].to_vec();
 
-fn type_command(command: Vec<&str>) {
-    for cmd_name in command {
-        let cmd = commands_from_string(cmd_name);
-
-        if !matches!(cmd, Command::Unknown) {
-            println!("{} is a shell builtin", cmd_name);
-            continue;
+        let cmd = Command::from_string(command_name);
+        match cmd {
+            Command::Exit => return false,
+            Command::Echo => Command::echo_cmd(command_args),
+            Command::Type => Command::type_cmd(command_args),
+            Command::PWD => Command::pwd_cmd(),
+            Command::Unknown => Command::external_command(command_name, command_args),
         }
 
-        match find_in_path(cmd_name) {
-            Some(path) => println!("{} is {}", cmd_name, path.display()),
-            None => println!("{}: not found", cmd_name),
+        true
+    }
+
+    fn echo_cmd(text: Vec<&str>) {
+        println!("{}", text.join(" "));
+    }
+
+    fn type_cmd(command: Vec<&str>) {
+        for cmd_name in command {
+            let cmd = Command::from_string(cmd_name);
+
+            if !matches!(cmd, Command::Unknown) {
+                println!("{} is a shell builtin", cmd_name);
+                continue;
+            }
+
+            match find_in_path(cmd_name) {
+                Some(path) => println!("{} is {}", cmd_name, path.display()),
+                None => println!("{}: not found", cmd_name),
+            }
+        }
+    }
+
+    fn pwd_cmd() {
+        println!("{}", env::current_dir().unwrap().display());
+    }
+
+    fn external_command(name: &str, args: Vec<&str>) {
+        match find_in_path(name) {
+            Some(_path) => match og_cmd::new(name).args(args).status() {
+                Ok(_) => {}
+                Err(e) => println!("{e}"),
+            },
+            None => println!("{}: command not found", name),
         }
     }
 }
@@ -93,40 +145,5 @@ fn is_executable(path: &Path) -> bool {
             "exe" | "cmd" | "bat" | "com"
         ),
         None => false,
-    }
-}
-
-fn run_command(name: &str, args: Vec<&str>) {
-    match find_in_path(name) {
-        Some(_path) => match og_cmd::new(name).args(args).status() {
-            Ok(_) => {}
-            Err(e) => println!("{e}"),
-        },
-        None => println!("{}: command not found", name),
-    }
-}
-
-fn repl() {
-    loop {
-        print!("$ ");
-        io::stdout().flush().unwrap();
-
-        let mut command = String::new();
-        io::stdin().read_line(&mut command).unwrap();
-        let command = command.trim();
-
-        if command != "" {
-            let args = command.split(" ").collect::<Vec<&str>>();
-            let command_name = args[0];
-            let command_args = args[1..].to_vec();
-
-            let cmd = commands_from_string(command_name);
-            match cmd {
-                Command::Exit => break,
-                Command::Echo => echo_command(command_args),
-                Command::Type => type_command(command_args),
-                Command::Unknown => run_command(command_name, command_args),
-            }
-        }
     }
 }
