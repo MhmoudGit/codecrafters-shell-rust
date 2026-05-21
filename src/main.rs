@@ -1,8 +1,9 @@
 #[allow(unused_imports)]
 use std::env;
+use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::Path;
-use std::process::Command as og_cmd;
+use std::process::{Command as og_cmd, Stdio};
 
 fn main() {
     repl();
@@ -47,7 +48,8 @@ impl Command {
     }
 
     fn execute(command: &str) -> bool {
-        let args = parse_args(command);
+        let parsed = parse_redirect(parse_args(command));
+        let args = parsed.args;
 
         if args.is_empty() {
             return true;
@@ -59,20 +61,27 @@ impl Command {
         let cmd = Command::from_string(&command_name);
         match cmd {
             Command::Exit => return false,
-            Command::Echo => Command::echo_cmd(command_args),
+            Command::Echo => Command::echo_cmd(command_args, parsed.stdout),
             Command::Type => Command::type_cmd(command_args),
-            Command::PWD => Command::pwd_cmd(),
+            Command::PWD => Command::pwd_cmd(parsed.stdout),
             Command::CD => Command::cd_cmd(command_args),
-            Command::Unknown => Command::external_command(command_name, command_args),
+            Command::Unknown => {
+                Command::external_command(command_name, command_args, parsed.stdout)
+            }
         }
 
         true
     }
 
-    fn echo_cmd(text: Vec<String>) {
-        println!("{}", text.join(" "));
-    }
+    fn echo_cmd(text: Vec<String>, redirect: Option<(String, bool)>) {
+        let output = format!("{}\n", text.join(" "));
 
+        if let Some((file, append)) = redirect {
+            write_to_file(&file, &output, append);
+        } else {
+            print!("{output}");
+        }
+    }
     fn type_cmd(command: Vec<String>) {
         for cmd_name in command {
             let cmd = Command::from_string(&cmd_name);
@@ -89,8 +98,14 @@ impl Command {
         }
     }
 
-    fn pwd_cmd() {
-        println!("{}", env::current_dir().unwrap().display());
+    fn pwd_cmd(redirect: Option<(String, bool)>) {
+        let output = format!("{}\n", env::current_dir().unwrap().display());
+
+        if let Some((file, append)) = redirect {
+            write_to_file(&file, &output, append);
+        } else {
+            print!("{output}");
+        }
     }
 
     fn cd_cmd(path: Vec<String>) {
@@ -108,12 +123,34 @@ impl Command {
         }
     }
 
-    fn external_command(name: String, args: Vec<String>) {
+    fn external_command(name: String, args: Vec<String>, redirect: Option<(String, bool)>) {
         match find_in_path(&name) {
-            Some(_path) => match og_cmd::new(&name).args(&args).status() {
-                Ok(_) => {}
-                Err(e) => println!("{e}"),
-            },
+            Some(_path) => {
+                let mut cmd = og_cmd::new(&name);
+                cmd.args(&args);
+
+                if let Some((file, append)) = redirect {
+                    match OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .append(append)
+                        .truncate(!append)
+                        .open(file)
+                    {
+                        Ok(file) => {
+                            cmd.stdout(Stdio::from(file));
+                        }
+                        Err(e) => {
+                            println!("redirection error: {e}");
+                            return;
+                        }
+                    }
+                }
+
+                if let Err(e) = cmd.status() {
+                    println!("{e}");
+                }
+            }
             None => println!("{}: command not found", name),
         }
     }
@@ -224,4 +261,66 @@ fn parse_args(command: &str) -> Vec<String> {
     }
 
     args
+}
+
+#[derive(Debug)]
+struct Redirect {
+    args: Vec<String>,
+    stdout: Option<(String, bool)>, // file, append
+}
+
+fn parse_redirect(args: Vec<String>) -> Redirect {
+    let mut clean_args = Vec::new();
+    let mut stdout = None;
+    let mut i = 0;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            ">" => {
+                if i + 1 < args.len() {
+                    stdout = Some((args[i + 1].clone(), false));
+                    i += 2;
+                } else {
+                    println!("syntax error: expected file after >");
+                    break;
+                }
+            }
+            ">>" => {
+                if i + 1 < args.len() {
+                    stdout = Some((args[i + 1].clone(), true));
+                    i += 2;
+                } else {
+                    println!("syntax error: expected file after >>");
+                    break;
+                }
+            }
+            _ => {
+                clean_args.push(args[i].clone());
+                i += 1;
+            }
+        }
+    }
+
+    Redirect {
+        args: clean_args,
+        stdout,
+    }
+}
+
+fn write_to_file(path: &str, content: &str, append: bool) {
+    let result = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(append)
+        .truncate(!append)
+        .open(path);
+
+    match result {
+        Ok(mut file) => {
+            if let Err(e) = file.write_all(content.as_bytes()) {
+                println!("redirection error: {e}");
+            }
+        }
+        Err(e) => println!("redirection error: {e}"),
+    }
 }
