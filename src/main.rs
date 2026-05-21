@@ -276,7 +276,7 @@ fn parse_redirect(args: Vec<String>) -> Redirect {
 
     while i < args.len() {
         match args[i].as_str() {
-            ">" => {
+            ">" | "1>" => {
                 if i + 1 < args.len() {
                     stdout = Some((args[i + 1].clone(), false));
                     i += 2;
