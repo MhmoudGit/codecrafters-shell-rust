@@ -30,6 +30,7 @@ enum Command {
     Echo,
     Type,
     PWD,
+    CD,
     Unknown,
 }
 
@@ -40,6 +41,7 @@ impl Command {
             "echo" => Command::Echo,
             "type" => Command::Type,
             "pwd" => Command::PWD,
+            "cd" => Command::CD,
             _ => Command::Unknown,
         }
     }
@@ -55,6 +57,7 @@ impl Command {
             Command::Echo => Command::echo_cmd(command_args),
             Command::Type => Command::type_cmd(command_args),
             Command::PWD => Command::pwd_cmd(),
+            Command::CD => Command::cd_cmd(command_args),
             Command::Unknown => Command::external_command(command_name, command_args),
         }
 
@@ -83,6 +86,20 @@ impl Command {
 
     fn pwd_cmd() {
         println!("{}", env::current_dir().unwrap().display());
+    }
+
+    fn cd_cmd(path: Vec<&str>) {
+        if path.len() == 0 {
+            println!("cd: missing argument");
+            return;
+        }
+
+        let target_dir = path[0];
+
+        match env::set_current_dir(target_dir) {
+            Ok(_) => {}
+            Err(_) => println!("cd: {target_dir}: No such file or directory"),
+        }
     }
 
     fn external_command(name: &str, args: Vec<&str>) {
