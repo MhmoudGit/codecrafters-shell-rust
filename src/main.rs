@@ -76,13 +76,11 @@ impl Command {
     fn echo_cmd(
         text: Vec<String>,
         redirect: Option<(String, bool)>,
-        err_redirect: Option<(String, bool)>,
+        _err_redirect: Option<(String, bool)>,
     ) {
         let output = format!("{}\n", text.join(" "));
 
         if let Some((file, append)) = redirect {
-            write_to_file(&file, &output, append);
-        } else if let Some((file, append)) = err_redirect {
             write_to_file(&file, &output, append);
         } else {
             print!("{output}");
@@ -105,12 +103,10 @@ impl Command {
         }
     }
 
-    fn pwd_cmd(redirect: Option<(String, bool)>, err_redirect: Option<(String, bool)>) {
+    fn pwd_cmd(redirect: Option<(String, bool)>, _err_redirect: Option<(String, bool)>) {
         let output = format!("{}\n", env::current_dir().unwrap().display());
 
         if let Some((file, append)) = redirect {
-            write_to_file(&file, &output, append);
-        } else if let Some((file, append)) = err_redirect {
             write_to_file(&file, &output, append);
         } else {
             print!("{output}");
