@@ -61,27 +61,34 @@ impl Command {
         let cmd = Command::from_string(&command_name);
         match cmd {
             Command::Exit => return false,
-            Command::Echo => Command::echo_cmd(command_args, parsed.stdout),
+            Command::Echo => Command::echo_cmd(command_args, parsed.stdout, parsed.stderr),
             Command::Type => Command::type_cmd(command_args),
-            Command::PWD => Command::pwd_cmd(parsed.stdout),
+            Command::PWD => Command::pwd_cmd(parsed.stdout, parsed.stderr),
             Command::CD => Command::cd_cmd(command_args),
             Command::Unknown => {
-                Command::external_command(command_name, command_args, parsed.stdout)
+                Command::external_command(command_name, command_args, parsed.stdout, parsed.stderr)
             }
         }
 
         true
     }
 
-    fn echo_cmd(text: Vec<String>, redirect: Option<(String, bool)>) {
+    fn echo_cmd(
+        text: Vec<String>,
+        redirect: Option<(String, bool)>,
+        err_redirect: Option<(String, bool)>,
+    ) {
         let output = format!("{}\n", text.join(" "));
 
         if let Some((file, append)) = redirect {
+            write_to_file(&file, &output, append);
+        } else if let Some((file, append)) = err_redirect {
             write_to_file(&file, &output, append);
         } else {
             print!("{output}");
         }
     }
+
     fn type_cmd(command: Vec<String>) {
         for cmd_name in command {
             let cmd = Command::from_string(&cmd_name);
@@ -98,10 +105,12 @@ impl Command {
         }
     }
 
-    fn pwd_cmd(redirect: Option<(String, bool)>) {
+    fn pwd_cmd(redirect: Option<(String, bool)>, err_redirect: Option<(String, bool)>) {
         let output = format!("{}\n", env::current_dir().unwrap().display());
 
         if let Some((file, append)) = redirect {
+            write_to_file(&file, &output, append);
+        } else if let Some((file, append)) = err_redirect {
             write_to_file(&file, &output, append);
         } else {
             print!("{output}");
@@ -123,7 +132,12 @@ impl Command {
         }
     }
 
-    fn external_command(name: String, args: Vec<String>, redirect: Option<(String, bool)>) {
+    fn external_command(
+        name: String,
+        args: Vec<String>,
+        redirect: Option<(String, bool)>,
+        err_redirect: Option<(String, bool)>,
+    ) {
         match find_in_path(&name) {
             Some(_path) => {
                 let mut cmd = og_cmd::new(&name);
@@ -139,6 +153,24 @@ impl Command {
                     {
                         Ok(file) => {
                             cmd.stdout(Stdio::from(file));
+                        }
+                        Err(e) => {
+                            println!("redirection error: {e}");
+                            return;
+                        }
+                    }
+                }
+
+                if let Some((file, append)) = err_redirect {
+                    match OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .append(append)
+                        .truncate(!append)
+                        .open(file)
+                    {
+                        Ok(file) => {
+                            cmd.stderr(Stdio::from(file));
                         }
                         Err(e) => {
                             println!("redirection error: {e}");
@@ -267,11 +299,13 @@ fn parse_args(command: &str) -> Vec<String> {
 struct Redirect {
     args: Vec<String>,
     stdout: Option<(String, bool)>, // file, append
+    stderr: Option<(String, bool)>, // file, append
 }
 
 fn parse_redirect(args: Vec<String>) -> Redirect {
     let mut clean_args = Vec::new();
     let mut stdout = None;
+    let mut stderr = None;
     let mut i = 0;
 
     while i < args.len() {
@@ -285,12 +319,30 @@ fn parse_redirect(args: Vec<String>) -> Redirect {
                     break;
                 }
             }
-            ">>" => {
+            ">>" | "1>>" => {
                 if i + 1 < args.len() {
                     stdout = Some((args[i + 1].clone(), true));
                     i += 2;
                 } else {
                     println!("syntax error: expected file after >>");
+                    break;
+                }
+            }
+            "2>" => {
+                if i + 1 < args.len() {
+                    stderr = Some((args[i + 1].clone(), false));
+                    i += 2;
+                } else {
+                    println!("syntax error: expected file after 2>");
+                    break;
+                }
+            }
+            "2>>" => {
+                if i + 1 < args.len() {
+                    stderr = Some((args[i + 1].clone(), true));
+                    i += 2;
+                } else {
+                    println!("syntax error: expected file after 2>>");
                     break;
                 }
             }
@@ -304,6 +356,7 @@ fn parse_redirect(args: Vec<String>) -> Redirect {
     Redirect {
         args: clean_args,
         stdout,
+        stderr,
     }
 }
 
