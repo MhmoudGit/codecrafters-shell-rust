@@ -171,12 +171,12 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ParseState {
     Normal,
     SingleQuote,
     DoubleQuote,
-    Escape,
+    Escape(Box<ParseState>),
 }
 
 fn parse_args(command: &str) -> Vec<String> {
@@ -189,7 +189,7 @@ fn parse_args(command: &str) -> Vec<String> {
             ParseState::Normal => match c {
                 '\'' => state = ParseState::SingleQuote,
                 '"' => state = ParseState::DoubleQuote,
-                '\\' => state = ParseState::Escape,
+                '\\' => state = ParseState::Escape(Box::new(ParseState::Normal)),
 
                 ' ' => {
                     if !current.is_empty() {
@@ -208,12 +208,13 @@ fn parse_args(command: &str) -> Vec<String> {
 
             ParseState::DoubleQuote => match c {
                 '"' => state = ParseState::Normal,
+                '\\' => state = ParseState::Escape(Box::new(ParseState::DoubleQuote)),
                 _ => current.push(c),
             },
 
-            ParseState::Escape => {
+            ParseState::Escape(prev) => {
                 current.push(c);
-                state = ParseState::Normal;
+                state = *prev;
             }
         }
     }
