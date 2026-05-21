@@ -47,11 +47,16 @@ impl Command {
     }
 
     fn execute(command: &str) -> bool {
-        let args = command.split(" ").collect::<Vec<&str>>();
-        let command_name = args[0];
+        let args = Command::parse_args(command);
+
+        if args.is_empty() {
+            return true;
+        }
+
+        let command_name = args[0].clone();
         let command_args = args[1..].to_vec();
 
-        let cmd = Command::from_string(command_name);
+        let cmd = Command::from_string(&command_name);
         match cmd {
             Command::Exit => return false,
             Command::Echo => Command::echo_cmd(command_args),
@@ -64,20 +69,51 @@ impl Command {
         true
     }
 
-    fn echo_cmd(text: Vec<&str>) {
+    fn parse_args(command: &str) -> Vec<String> {
+        let mut args = Vec::new();
+        let mut current = String::new();
+        let mut in_single_quote = false;
+
+        for c in command.chars() {
+            match c {
+                '\'' => {
+                    in_single_quote = !in_single_quote;
+                }
+
+                ' ' if !in_single_quote => {
+                    if !current.is_empty() {
+                        args.push(current);
+                        current = String::new();
+                    }
+                }
+
+                _ => {
+                    current.push(c);
+                }
+            }
+        }
+
+        if !current.is_empty() {
+            args.push(current);
+        }
+
+        args
+    }
+
+    fn echo_cmd(text: Vec<String>) {
         println!("{}", text.join(" "));
     }
 
-    fn type_cmd(command: Vec<&str>) {
+    fn type_cmd(command: Vec<String>) {
         for cmd_name in command {
-            let cmd = Command::from_string(cmd_name);
+            let cmd = Command::from_string(&cmd_name);
 
             if !matches!(cmd, Command::Unknown) {
                 println!("{} is a shell builtin", cmd_name);
                 continue;
             }
 
-            match find_in_path(cmd_name) {
+            match find_in_path(&cmd_name) {
                 Some(path) => println!("{} is {}", cmd_name, path.display()),
                 None => println!("{}: not found", cmd_name),
             }
@@ -88,14 +124,14 @@ impl Command {
         println!("{}", env::current_dir().unwrap().display());
     }
 
-    fn cd_cmd(path: Vec<&str>) {
+    fn cd_cmd(path: Vec<String>) {
         if path.len() == 0 {
             println!("cd: missing argument");
             return;
         }
 
         let home = env::var("HOME").unwrap();
-        let target_dir = if path[0] == "~" { &home } else { path[0] };
+        let target_dir = if path[0] == "~" { &home } else { &path[0] };
 
         match env::set_current_dir(target_dir) {
             Ok(_) => {}
@@ -103,9 +139,9 @@ impl Command {
         }
     }
 
-    fn external_command(name: &str, args: Vec<&str>) {
-        match find_in_path(name) {
-            Some(_path) => match og_cmd::new(name).args(args).status() {
+    fn external_command(name: String, args: Vec<String>) {
+        match find_in_path(&name) {
+            Some(_path) => match og_cmd::new(&name).args(&args).status() {
                 Ok(_) => {}
                 Err(e) => println!("{e}"),
             },
